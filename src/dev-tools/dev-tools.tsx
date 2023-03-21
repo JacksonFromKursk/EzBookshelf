@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 //@ts-nocheck
-/** @jsx jsx */
+/** @jsxImportSource @emotion/react */
 import {jsx, Global} from '@emotion/core'
 
 import '@reach/tabs/styles.css'
