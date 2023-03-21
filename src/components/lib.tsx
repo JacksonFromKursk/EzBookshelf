@@ -1,4 +1,4 @@
-/** @jsx jsx */
+/** @jsxImportSource @emotion/react */
 import {Link as RouterLink} from 'react-router-dom'
 import styled from '@emotion/styled/macro'
 import {jsx, keyframes} from '@emotion/core'
