@@ -1,4 +1,4 @@
-/** @jsx jsx */
+/** @jsxImportSource @emotion/react */
 import {jsx} from '@emotion/core'
 
 import {Routes, Route, Link as RouterLink, useMatch} from 'react-router-dom'
