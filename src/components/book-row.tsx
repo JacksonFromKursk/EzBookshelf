@@ -1,4 +1,4 @@
-/** @jsx jsx */
+/** @jsxImportSource @emotion/react */
 import {jsx} from '@emotion/core'
 
 import {Link} from 'react-router-dom'
