@@ -73,7 +73,7 @@ self.addEventListener('message', async function (event) {
         return client.id !== clientId
       })
 
-    
+      // Unregister itself when there are no more clients
       if (remainingClients.length === 0) {
         self.registration.unregister()
       }
@@ -83,7 +83,10 @@ self.addEventListener('message', async function (event) {
   }
 })
 
-
+// Resolve the "main" client for the given event.
+// Client that issues a request doesn't necessarily equal the client
+// that registered the worker. It's with the latter the worker should
+// communicate with during the response resolving phase.
 async function resolveMainClient(event) {
   const client = await self.clients.get(event.clientId)
 
@@ -95,9 +98,12 @@ async function resolveMainClient(event) {
 
   return allClients
     .filter((client) => {
+      // Get only those clients that are currently visible.
       return client.visibilityState === 'visible'
     })
     .find((client) => {
+      // Find the client ID that's recorded in the
+      // set of clients that have registered the worker.
       return activeClientIds.has(client.id)
     })
 }
@@ -106,6 +112,9 @@ async function handleRequest(event, requestId) {
   const client = await resolveMainClient(event)
   const response = await getResponse(event, client, requestId)
 
+  // Send back the response clone for the "response:*" life-cycle events.
+  // Ensure MSW is active and ready to handle the message, otherwise
+  // this message will pend indefinitely.
   if (client && activeClientIds.has(client.id)) {
     ;(async function () {
       const clonedResponse = response.clone()
@@ -134,17 +143,24 @@ async function getResponse(event, client, requestId) {
   const requestClone = request.clone()
   const getOriginalResponse = () => fetch(requestClone)
 
+  // Bypass mocking when the request client is not active.
   if (!client) {
     return getOriginalResponse()
   }
 
+  // Bypass initial page load requests (i.e. static assets).
+  // The absence of the immediate/parent client in the map of the active clients
+  // means that MSW hasn't dispatched the "MOCK_ACTIVATE" event yet
+  // and is not ready to handle requests.
   if (!activeClientIds.has(client.id)) {
     return await getOriginalResponse()
   }
 
+  // Bypass requests with the explicit bypass header
   if (requestClone.headers.get(bypassHeaderName) === 'true') {
     const cleanRequestHeaders = serializeHeaders(requestClone.headers)
 
+    // Remove the bypass header to comply with the CORS preflight check.
     delete cleanRequestHeaders[bypassHeaderName]
 
     const originalRequest = new Request(requestClone, {
@@ -154,6 +170,7 @@ async function getResponse(event, client, requestId) {
     return fetch(originalRequest)
   }
 
+  // Send the request to the client-side MSW.
   const reqHeaders = serializeHeaders(request.headers)
   const body = await request.text()
 
@@ -195,6 +212,7 @@ async function getResponse(event, client, requestId) {
       const networkError = new Error(message)
       networkError.name = name
 
+      // Rejecting a request Promise emulates a network error.
       throw networkError
     }
 
@@ -224,18 +242,25 @@ self.addEventListener('fetch', function (event) {
   const { request } = event
   const accept = request.headers.get('accept') || ''
 
+  // Bypass server-sent events.
   if (accept.includes('text/event-stream')) {
     return
   }
 
+  // Bypass navigation requests.
   if (request.mode === 'navigate') {
     return
   }
 
+  // Opening the DevTools triggers the "only-if-cached" request
+  // that cannot be handled by the worker. Bypass such requests.
   if (request.cache === 'only-if-cached' && request.mode !== 'same-origin') {
     return
   }
 
+  // Bypass all requests when there are no active clients.
+  // Prevents the self-unregistered worked from handling requests
+  // after it's been deleted (still remains active until the next reload).
   if (activeClientIds.size === 0) {
     return
   }
@@ -253,6 +278,7 @@ self.addEventListener('fetch', function (event) {
         return
       }
 
+      // At this point, any exception indicates an issue with the original request/response.
       console.error(
         `\
 [MSW] Caught an exception from the "%s %s" request (%s). This is probably not a problem with Mock Service Worker. There is likely an additional logging output above.`,
